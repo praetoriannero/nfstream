@@ -17,7 +17,7 @@ from .engine import create_engine, setup_capture, setup_dissector, activate_capt
 from .utils import set_affinity, InternalError, InternalState, NFEvent, NFMode
 from collections import OrderedDict
 from .flow import NFlow
-
+import queue
 
 ENGINE_LOAD_ERR = "Error when loading engine library. This means that you are probably building nfstream from source \
 and something went wrong during the engine compilation step. Please see: \
@@ -28,6 +28,10 @@ NPCAP_LOAD_ERR = "Error finding npcap library. Please make sure you npcap is ins
 NDPI_LOAD_ERR = "Error while loading Dissector. This means that you are building nfstream with an out of sync nDPI."
 
 FLOW_KEY = "{}:{}:{}:{}:{}:{}:{}:{}:{}"
+
+TICK_RESOLUTION = 1000
+
+MP_QUEUE_TIMEOUT = 1
 
 
 class NFCache(OrderedDict):
@@ -431,7 +435,7 @@ def meter_workflow(
     else:
         sources = [source]
 
-    for source_idx, source in enumerate(sources):
+    for source in sources:
         error_child = ffi.new("char[256]")
         capture = setup_capture(
             ffi,
@@ -464,10 +468,22 @@ def meter_workflow(
         while remaining_packets:
             nf_packet = ffi.new("struct nf_packet *")
             if mode == NFMode.MP_QUEUE:
-                pass
-            ret = lib.capture_next(
-                capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode)
-            )
+                try:
+                    ts, buf = source.get(timeout=MP_QUEUE_TIMEOUT)
+                    ts_ms = int(ts * TICK_RESOLUTION)
+                    cap_length = len(buf)
+                    length = len(buf)
+                    ret = lib.consume_next(
+                        capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode),
+                        ts_ms, cap_length, length, buf
+                    )
+                except queue.Empty:
+                    ret = -2
+            else:
+                ret = lib.capture_next(
+                    capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode)
+                )
+
             if ret > 0:  # Valid must be processed by meter
                 packet_time = nf_packet.time
                 if packet_time > meter_tick:

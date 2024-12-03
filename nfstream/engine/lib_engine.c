@@ -1633,6 +1633,23 @@ int capture_set_filter(pcap_t * pcap_handle, char * bpf_filter, char * child_err
 }
 
 /**
+ * consume_next: Consume a packet that didn't come from a pcap handle.
+ */
+int consume_next(pcap_t * pcap_handle, struct nf_packet * nf_pkt, int decode_tunnels, int n_roots, uint64_t root_idx,
+                 int mode, uint64_t time, uint32_t caplen, uint32_t len, const uint8_t * data) {
+  // Check Data Link type
+  int rv_processor = packet_process(
+    (int)pcap_datalink(pcap_handle), caplen, len, data, decode_tunnels, nf_pkt, n_roots, root_idx, mode, time
+  );
+  if (rv_processor == 0) {
+      return 0; // Packet ignored due to parsing
+  } else if (rv_processor == 1) { // Packet parsed correctly and match root_idx
+      return 1;
+  } else { // Packet parsed correctly and do not match root_idx, will use it as time ticker
+      return 2;
+  }
+}
+/**
  * capture_next: Get next packet information from pcap handle.
  */
 int capture_next(pcap_t * pcap_handle, struct nf_packet * nf_pkt, int decode_tunnels, int n_roots, uint64_t root_idx,

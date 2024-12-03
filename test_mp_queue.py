@@ -1,6 +1,8 @@
 from dpkt.pcap import UniversalReader
 import os
 import multiprocessing as mp
+import pandas as pd
+import time
 
 from nfstream.streamer import NFStreamer
 
@@ -13,9 +15,13 @@ def job(queue, pcap_path):
 
 
 def main():
-    file_path = "/home/heaven/source/cic_ids_2017/deduped/Monday-WorkingHours_deduped.pcap"
-    streamer = NFStreamer(source=file_path, n_meters=3, idle_timeout=5, active_timeout=120,)
-    streamer.to_csv("pcap_output.csv")
+    file_path = "/home/nheaven/cicids2017/deduped/Monday-WorkingHours.pcap"
+    streamer = NFStreamer(source=file_path, n_meters=3, idle_timeout=5, active_timeout=120, n_dissections=0)
+    pcap_csv_output = "pcap_output.csv"
+    streamer.to_csv(pcap_csv_output)
+    pcap_df = pd.read_csv(pcap_csv_output)
+    print(pcap_df)
+    
 
 
 if __name__ == "__main__":

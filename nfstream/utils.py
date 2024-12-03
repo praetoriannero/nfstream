@@ -36,6 +36,11 @@ class NFMode(IntEnum):
     MP_QUEUE = 3
 
 
+class NFQueue(IntEnum):
+    CLOSED = 0
+    OPEN = 1
+
+
 InternalError = namedtuple("InternalError", ["id", "message"])
 
 InternalState = namedtuple("InternalState", ["id"])
