@@ -464,12 +464,15 @@ def meter_workflow(
             )
             return
 
+        print(mode)
         remaining_packets = True
         while remaining_packets:
             nf_packet = ffi.new("struct nf_packet *")
             if mode == NFMode.MP_QUEUE:
                 try:
                     ts, buf = source.get(timeout=MP_QUEUE_TIMEOUT)
+                    print(ts)
+                    print(buf.hex())
                     ts_ms = int(ts * TICK_RESOLUTION)
                     cap_length = len(buf)
                     length = len(buf)
@@ -477,6 +480,7 @@ def meter_workflow(
                         capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode),
                         ts_ms, cap_length, length, buf
                     )
+                    print(ret)
                 except queue.Empty:
                     ret = -2
             else:

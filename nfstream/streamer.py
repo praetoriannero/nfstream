@@ -122,8 +122,9 @@ class NFStreamer(object):
 
     @source.setter
     def source(self, value) -> None:
-        if isinstance(value, Queue):
-            self._source = value
+        mp.Queue()  # This initializes the Queue AutoProxy object which then allows us to perform the next
+                    # isinstance call reliably... I wish I was joking.
+        if isinstance(value, mp.queues.Queue):
             self._mode = NFMode.MP_QUEUE
         elif isinstance(value, list):  # List of pcap files to consider as a single one.
             if len(value) == 0:
@@ -158,6 +159,7 @@ class NFStreamer(object):
                         "Please provide a multiprocessing queue or specify a pcap file path or"
                         " a valid network interface name as source."
                     )
+
         self._source = value
 
     @property

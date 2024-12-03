@@ -209,6 +209,8 @@ pcap_t * capture_open(const char * pcap_file, int mode, char * child_error, int 
 int capture_activate(pcap_t * pcap_handle, int mode, char * child_error);
 int capture_next(pcap_t * pcap_handle, struct nf_packet *nf_pkt, int decode_tunnels, int n_roots, uint64_t root_idx,
                  int mode);
+int consume_next(pcap_t * pcap_handle, struct nf_packet * nf_pkt, int decode_tunnels, int n_roots, uint64_t root_idx,
+                 int mode, uint64_t time, uint32_t caplen, uint32_t len, const uint8_t * data);
 void capture_close(pcap_t * pcap_handle);
 void capture_stats(pcap_t * pcap_handle, struct nf_stat *nf_statistics, unsigned mode);
 int capture_set_fanout(pcap_t * pcap_handle, int mode, char * child_error, int group_id);
