@@ -14,6 +14,7 @@ If not, see <http://www.gnu.org/licenses/>.
 """
 
 from multiprocessing import get_context
+import multiprocessing as mp
 import threading
 import pandas as pd
 import time as tm
@@ -22,6 +23,7 @@ import platform
 import psutil
 from collections.abc import Iterable
 from os.path import isfile
+from queue import Queue
 from .meter import meter_workflow
 from .anonymizer import NFAnonymizer
 from .engine import is_interface
@@ -119,8 +121,11 @@ class NFStreamer(object):
         return self._source
 
     @source.setter
-    def source(self, value):
-        if type(value) == list:  # List of pcap files to consider as a single one.
+    def source(self, value) -> None:
+        if isinstance(value, Queue):
+            self._source = value
+            self._mode = NFMode.MP_QUEUE
+        elif isinstance(value, list):  # List of pcap files to consider as a single one.
             if len(value) == 0:
                 raise ValueError("Please provide a non-empty list of sources.")
             else:
@@ -150,7 +155,8 @@ class NFStreamer(object):
                     value = interface
                 else:
                     raise ValueError(
-                        "Please specify a pcap file path or a valid network interface name as source."
+                        "Please provide a multiprocessing queue or specify a pcap file path or"
+                        " a valid network interface name as source."
                     )
         self._source = value
 
@@ -439,7 +445,6 @@ class NFStreamer(object):
         child_error = None
         rt = None
         socket_listener = None
-        browser_listener = None
         conn_cache = {}
 
         # To avoid issues on PyPy on Windows (See https://foss.heptapod.net/pypy/pypy/-/issues/3488), All

@@ -463,6 +463,8 @@ def meter_workflow(
         remaining_packets = True
         while remaining_packets:
             nf_packet = ffi.new("struct nf_packet *")
+            if mode == NFMode.MP_QUEUE:
+                pass
             ret = lib.capture_next(
                 capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode)
             )

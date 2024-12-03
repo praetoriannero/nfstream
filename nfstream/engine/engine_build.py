@@ -181,18 +181,18 @@ NDPI_PACKED_STRUCTURES = NDPI_PACKED.split("//CFFI.NDPI_PACKED_STRUCTURES")[1]
 # --------------------------------Engine Library Magic Code Generator --------------------------------------------------
 
 
-# As cdef do not support if-def, yet we fix it by simple string replacement
+# Since cdef does not support if-def, we can fix it by simple string replacement
 SOCK_INCLUDES = (
     """#include <unistd.h>\n#include <netinet/in.h>\n#include <sys/time.h>"""
 )
 if os.name != "posix":
     SOCK_INCLUDES = """#include <winsock2.h>\n#include <process.h>\n#include <io.h>"""
+
 ENGINE_INCLUDES = (
-    """
-#include <stdlib.h>
 """
-    + SOCK_INCLUDES
-    + """
+#include <stdlib.h>
+#include <stdio.h>
+""" + SOCK_INCLUDES + """
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -244,7 +244,7 @@ ffi_builder.set_source(
 )
 
 ffi_builder.cdef(
-    """
+"""
 typedef uint64_t u_int64_t;
 typedef uint32_t u_int32_t;
 typedef uint16_t u_int16_t;
