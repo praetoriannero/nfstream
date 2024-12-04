@@ -140,7 +140,10 @@ class NFStreamer(object):
     def source(self, value) -> None:
         mp.Queue()  # This initializes the Queue AutoProxy object which then allows us to perform the next
                     # isinstance call reliably... I wish I was joking.
-        if isinstance(value, mp.queues.Queue):
+
+        mp.Manager().Queue()  # Sigh, this one, too.
+
+        if isinstance(value, (mp.queues.Queue, mp.managers.BaseProxy)):
             self._mode = NFMode.MP_QUEUE
         elif isinstance(value, list):  # List of pcap files to consider as a single one.
             if len(value) == 0:

@@ -31,7 +31,7 @@ FLOW_KEY = "{}:{}:{}:{}:{}:{}:{}:{}:{}"
 
 TICK_RESOLUTION = 1000
 
-MP_QUEUE_TIMEOUT = 1
+MP_QUEUE_TIMEOUT = 10
 
 
 class NFCache(OrderedDict):
@@ -472,8 +472,6 @@ def meter_workflow(
             index += 1
             nf_packet = ffi.new("struct nf_packet *")
             if mode == NFMode.MP_QUEUE:
-                if index % 100_000 == 0:
-                    print(source.qsize())
                 try:
                     ts, buf = source.get(timeout=MP_QUEUE_TIMEOUT)
                     ts_ms = int(ts * TICK_RESOLUTION)

@@ -20,7 +20,7 @@ def main():
     # file_path = "/home/nheaven/cicids2017/deduped/Monday-WorkingHours.pcap"
     file_path = "/home/nheaven/data/bigFlows.pcap"
     
-    streamer = NFStreamer(source=file_path, n_meters=1, idle_timeout=5, active_timeout=120, n_dissections=0)
+    streamer = NFStreamer(source=file_path, n_meters=0, idle_timeout=5, active_timeout=120, n_dissections=0)
     pcap_csv_output = "pcap_output_standard.csv"
     start_pcap_read = time.time()
     streamer.to_csv(pcap_csv_output)
@@ -28,10 +28,10 @@ def main():
     pcap_df = pd.read_csv(pcap_csv_output)
     print(pcap_df)
 
-    queue = mp.Queue()
+    queue = mp.Manager().Queue()
     proc = mp.Process(target=job, args=(queue, file_path,))
     streamer = NFStreamer(
-        source=queue, n_meters=1, idle_timeout=5, active_timeout=120, n_dissections=0, datalink_type=SupportedDLT.DLT_EN10MB
+        source=queue, n_meters=0, idle_timeout=5, active_timeout=120, n_dissections=0, datalink_type=SupportedDLT.DLT_EN10MB
     )
     queue_csv_output = "pcap_output_queue.csv"
     proc.start()
