@@ -33,6 +33,12 @@ class NFMode(IntEnum):
     SINGLE_FILE = 0
     INTERFACE = 1
     MULTIPLE_FILES = 2
+    MP_QUEUE = 3
+
+
+class NFQueue(IntEnum):
+    CLOSED = 0
+    OPEN = 1
 
 
 InternalError = namedtuple("InternalError", ["id", "message"])
@@ -156,7 +162,7 @@ def set_affinity(idx):
         try:
             psutil.Process().cpu_affinity(list(temp[idx % x]))
         except OSError as err:
-            print("WARNING: failed to set CPU affinity ({err})".format(err))
+            print(f"WARNING: failed to set CPU affinity ({err})")
 
 
 def available_cpus_count():

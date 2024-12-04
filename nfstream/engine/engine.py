@@ -17,10 +17,14 @@ from _lib_engine import ffi, lib
 
 
 def setup_capture(
-    ffi, lib, source, snaplen, promisc, mode, error_child, group_id, socket_buffer_size
+    ffi, lib, source, snaplen, promisc, mode, error_child, group_id, socket_buffer_size, datalink_type,
 ):
+    if isinstance(source, str):
+        _source = bytes(source, "utf-8")
+    else:
+        _source = b""
     capture = lib.capture_open(
-        bytes(source, "utf-8"), int(mode), error_child, socket_buffer_size
+        _source, int(mode), error_child, socket_buffer_size, datalink_type
     )
     if capture == ffi.NULL:
         return

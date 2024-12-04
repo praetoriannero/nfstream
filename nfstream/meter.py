@@ -17,7 +17,7 @@ from .engine import create_engine, setup_capture, setup_dissector, activate_capt
 from .utils import set_affinity, InternalError, InternalState, NFEvent, NFMode
 from collections import OrderedDict
 from .flow import NFlow
-
+import queue
 
 ENGINE_LOAD_ERR = "Error when loading engine library. This means that you are probably building nfstream from source \
 and something went wrong during the engine compilation step. Please see: \
@@ -28,6 +28,10 @@ NPCAP_LOAD_ERR = "Error finding npcap library. Please make sure you npcap is ins
 NDPI_LOAD_ERR = "Error while loading Dissector. This means that you are building nfstream with an out of sync nDPI."
 
 FLOW_KEY = "{}:{}:{}:{}:{}:{}:{}:{}:{}"
+
+TICK_RESOLUTION = 1000
+
+MP_QUEUE_TIMEOUT = 10
 
 
 class NFCache(OrderedDict):
@@ -175,6 +179,7 @@ def consume(
     cache,
     active_timeout,
     idle_timeout,
+    flow_id_generator,
     channel,
     ffi,
     lib,
@@ -192,6 +197,7 @@ def consume(
     # We maintain state for active flows computation 1 for creation, 0 for update/cut, -1 for custom expire
     flow_key = get_flow_key_from_pkt(packet)
     direction = 0  # by default, we assume that the flow should be updated src -> dst
+    sub_flow_id = 0
     try:  # update flow
         flow = cache[flow_key].update(
             packet,
@@ -216,11 +222,19 @@ def consume(
             else:  # active/inactive expiration
                 channel.put(flow)
                 direction = flow.expiration_id
+                if direction:
+                    flow_id = flow.flow_id
+                    sub_flow_id = flow.sub_flow_id + 1
+                else:
+                    flow_id = flow_id_generator.value
+                    flow_id_generator.value += 1
                 del cache[flow_key]
                 del flow
                 try:
                     cache[flow_key] = NFlow(
                         packet,
+                        flow_id,
+                        sub_flow_id,
                         ffi,
                         lib,
                         udps,
@@ -262,8 +276,12 @@ def consume(
     except KeyError:  # create flow
         try:
             if sync:
+                flow_id = flow_id_generator.value
+                flow_id_generator.value += 1
                 flow = NFlow(
                     packet,
+                    flow_id,
+                    sub_flow_id,
                     ffi,
                     lib,
                     udps,
@@ -298,8 +316,12 @@ def consume(
                     cache[flow_key] = flow
                     state = 1
             else:
+                flow_id = flow_id_generator.value
+                flow_id_generator.value += 1
                 cache[flow_key] = NFlow(
                     packet,
+                    flow_id,
+                    sub_flow_id,
                     ffi,
                     lib,
                     udps,
@@ -362,6 +384,7 @@ def meter_workflow(
     mode,
     idle_timeout,
     active_timeout,
+    flow_id_generator,
     accounting_mode,
     udps,
     n_dissections,
@@ -373,6 +396,7 @@ def meter_workflow(
     group_id,
     system_visibility_mode,
     socket_buffer_size,
+    datalink_type,
 ):
     """Metering workflow"""
     set_affinity(root_idx + 1)
@@ -412,7 +436,7 @@ def meter_workflow(
     else:
         sources = [source]
 
-    for source_idx, source in enumerate(sources):
+    for source in sources:
         error_child = ffi.new("char[256]")
         capture = setup_capture(
             ffi,
@@ -424,6 +448,7 @@ def meter_workflow(
             error_child,
             group_id,
             socket_buffer_size,
+            datalink_type,
         )
         if capture is None:
             send_error(
@@ -441,12 +466,28 @@ def meter_workflow(
             )
             return
 
+        index = 0
         remaining_packets = True
         while remaining_packets:
+            index += 1
             nf_packet = ffi.new("struct nf_packet *")
-            ret = lib.capture_next(
-                capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode)
-            )
+            if mode == NFMode.MP_QUEUE:
+                try:
+                    ts, buf = source.get(timeout=MP_QUEUE_TIMEOUT)
+                    ts_ms = int(ts * TICK_RESOLUTION)
+                    cap_length = len(buf)
+                    length = len(buf)
+                    ret = lib.consume_next(
+                        capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode),
+                        ts_ms, cap_length, length, buf
+                    )
+                except queue.Empty:
+                    ret = -2
+            else:
+                ret = lib.capture_next(
+                    capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode)
+                )
+
             if ret > 0:  # Valid must be processed by meter
                 packet_time = nf_packet.time
                 if packet_time > meter_tick:
@@ -465,6 +506,7 @@ def meter_workflow(
                         cache,
                         active_timeout,
                         idle_timeout,
+                        flow_id_generator,
                         channel,
                         ffi,
                         lib,

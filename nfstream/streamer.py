@@ -13,7 +13,9 @@ If not, see <http://www.gnu.org/licenses/>.
 ------------------------------------------------------------------------------------------------------------------------
 """
 
+import enum
 from multiprocessing import get_context
+import multiprocessing as mp
 import threading
 import pandas as pd
 import time as tm
@@ -22,6 +24,7 @@ import platform
 import psutil
 from collections.abc import Iterable
 from os.path import isfile
+from queue import Queue
 from .meter import meter_workflow
 from .anonymizer import NFAnonymizer
 from .engine import is_interface
@@ -42,6 +45,19 @@ from .utils import (
     validate_rotate_files,
 )
 from .system import system_socket_worflow, match_flow_conn
+
+
+class SupportedDLT(enum.IntEnum):
+    DLT_NULL = 0
+    DLT_EN10MB = 1
+    DLT_PPP = 9
+    DLT_RAW = 12
+    DLT_PPP_SERIAL = 50
+    DLT_C_HDLC = 104
+    DLT_LINUX_SLL = 113
+    DLT_IEEE802_11_RADIO = 127
+    DLT_IPV4 = 228
+    DLT_IPV6 = 229
 
 
 class NFStreamer(object):
@@ -81,6 +97,7 @@ class NFStreamer(object):
         performance_report=0,
         system_visibility_mode=0,
         system_visibility_poll_ms=100,
+        datalink_type=SupportedDLT.DLT_EN10MB,
     ):
         with NFStreamer.glock:
             NFStreamer.streamer_id += 1
@@ -103,6 +120,7 @@ class NFStreamer(object):
         self.performance_report = performance_report
         self.system_visibility_mode = system_visibility_mode
         self.system_visibility_poll_ms = system_visibility_poll_ms
+        self.datalink_type = datalink_type
 
         # NIC socket buffer size. Default is 0, which means that the pcap default value is used.
         # The default values may vary depending on the OS and CPU architecture.
@@ -119,8 +137,15 @@ class NFStreamer(object):
         return self._source
 
     @source.setter
-    def source(self, value):
-        if type(value) == list:  # List of pcap files to consider as a single one.
+    def source(self, value) -> None:
+        mp.Queue()  # This initializes the Queue AutoProxy object which then allows us to perform the next
+                    # isinstance call reliably... I wish I was joking.
+
+        mp.Manager().Queue()  # Sigh, this one, too.
+
+        if isinstance(value, (mp.queues.Queue, mp.managers.BaseProxy)):
+            self._mode = NFMode.MP_QUEUE
+        elif isinstance(value, list):  # List of pcap files to consider as a single one.
             if len(value) == 0:
                 raise ValueError("Please provide a non-empty list of sources.")
             else:
@@ -150,8 +175,10 @@ class NFStreamer(object):
                     value = interface
                 else:
                     raise ValueError(
-                        "Please specify a pcap file path or a valid network interface name as source."
+                        "Please provide a multiprocessing queue or specify a pcap file path or"
+                        " a valid network interface name as source."
                     )
+
         self._source = value
 
     @property
@@ -251,6 +278,22 @@ class NFStreamer(object):
                 "Please specify a valid accounting_mode parameter (possible values: 0, 1, 2, 3)."
             )
         self._accounting_mode = value
+
+    @property
+    def datalink_type(self):
+        return self._datalink_type
+
+    @datalink_type.setter
+    def datalink_type(self, value):
+        if not value in SupportedDLT:
+            available_types = ",".join(
+                [str(mem) for mem in SupportedDLT.values()]
+            )
+            raise ValueError(
+                f"Please provide a supported datalink type (possible values: {available_types})"
+            )
+        
+        self._datalink_type = value
 
     @property
     def udps(self):
@@ -439,13 +482,13 @@ class NFStreamer(object):
         child_error = None
         rt = None
         socket_listener = None
-        browser_listener = None
         conn_cache = {}
 
         # To avoid issues on PyPy on Windows (See https://foss.heptapod.net/pypy/pypy/-/issues/3488), All
         # multiprocessing Value invocation must be performed before the call to Queue.
         n_meters = self.n_meters
         idx_generator = self._mp_context.Value("i", 0)
+        flow_id_generator = self._mp_context.Value("i", 0)
         for i in range(n_meters):
             performances.append(
                 [
@@ -473,6 +516,7 @@ class NFStreamer(object):
                             self._mode,
                             self.idle_timeout * 1000,
                             self.active_timeout * 1000,
+                            flow_id_generator,
                             self.accounting_mode,
                             self.udps,
                             self.n_dissections,
@@ -484,6 +528,7 @@ class NFStreamer(object):
                             group_id,
                             self.system_visibility_mode,
                             self.socket_buffer_size,
+                            self.datalink_type,
                         ),
                     )
                 )
