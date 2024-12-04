@@ -396,6 +396,7 @@ def meter_workflow(
     group_id,
     system_visibility_mode,
     socket_buffer_size,
+    datalink_type,
 ):
     """Metering workflow"""
     set_affinity(root_idx + 1)
@@ -447,6 +448,7 @@ def meter_workflow(
             error_child,
             group_id,
             socket_buffer_size,
+            datalink_type,
         )
         if capture is None:
             send_error(
@@ -464,15 +466,16 @@ def meter_workflow(
             )
             return
 
-        print(mode)
+        index = 0
         remaining_packets = True
         while remaining_packets:
+            index += 1
             nf_packet = ffi.new("struct nf_packet *")
             if mode == NFMode.MP_QUEUE:
+                if index % 100_000 == 0:
+                    print(source.qsize())
                 try:
                     ts, buf = source.get(timeout=MP_QUEUE_TIMEOUT)
-                    print(ts)
-                    print(buf.hex())
                     ts_ms = int(ts * TICK_RESOLUTION)
                     cap_length = len(buf)
                     length = len(buf)
@@ -480,7 +483,6 @@ def meter_workflow(
                         capture, nf_packet, decode_tunnels, n_roots, root_idx, int(mode),
                         ts_ms, cap_length, length, buf
                     )
-                    print(ret)
                 except queue.Empty:
                     ret = -2
             else:

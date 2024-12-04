@@ -577,7 +577,6 @@ static int packet_datalink_checker(uint32_t caplen, const uint8_t *packet, uint1
                             int datalink_type, uint16_t *ip_offset, int *pyld_eth_len, uint16_t *radio_len, uint16_t *fc,
                             int *wifi_len, struct nf_packet *nf_pkt) {
   if (caplen < (eth_offset + 28)) return 0; /* 28 = min IP + min UDP */
-  printf("cffi datalink type %d\n", datalink_type);
   switch(datalink_type) {
   case DLT_NULL:
     packet_dlt_null(packet, eth_offset, type, ip_offset);
@@ -676,11 +675,6 @@ static int packet_process(int datalink_type, uint32_t caplen, uint32_t len, cons
   uint16_t radio_len = 0, fc = 0, type = 0, ip_offset = 0, ip_len = 0, frag_off = 0, vlan_id = 0;
   int wifi_len = 0, pyld_eth_len = 0;
   uint8_t proto = 0, recheck_type = 0;
-  printf("cffi data = ");
-  for (int i=0; i<len; i++) {
-    printf("%02x", packet[i]);
-  }
-  printf("\n");
 
  datalink_check:
    if (!packet_datalink_checker(caplen, packet, eth_offset, &type, datalink_type, &ip_offset, &pyld_eth_len, &radio_len,
@@ -700,11 +694,8 @@ static int packet_process(int datalink_type, uint32_t caplen, uint32_t len, cons
 
   // just work on Ethernet packets that contain IP */
   if (type == ETH_P_IP && caplen >= ip_offset) {
-    printf("should have some IP frags!!\n");
     frag_off = ntohs(iph->frag_off);
     proto = iph->protocol;
-  } else {
-    printf("found no IP frags!!\n");
   }
 
   if (iph->version == IPVERSION) {
@@ -1505,7 +1496,7 @@ char * capture_get_interface(char * intf_name) {
 /**
  * capture_open: Open a pcap file or a specified device.
  */
-pcap_t * capture_open(const char * pcap_file, int mode, char * child_error, int socket_buffer_size) {
+pcap_t * capture_open(const char * pcap_file, int mode, char * child_error, int socket_buffer_size, int datalink_type) {
   pcap_t * pcap_handle = NULL;
   int default_snaplen = 1536;
   int status; // pcap_set_buffer_size return status
@@ -1514,7 +1505,7 @@ pcap_t * capture_open(const char * pcap_file, int mode, char * child_error, int 
     pcap_handle = pcap_open_offline(pcap_file, pcap_error_buffer);
   }
   if (mode == MODE_MP_QUEUE) {
-    pcap_handle = pcap_open_dead(DLT_NULL, default_snaplen);
+    pcap_handle = pcap_open_dead(datalink_type, default_snaplen);
   }
   if (mode == MODE_INTERFACE) {
     pcap_handle = pcap_create(pcap_file, pcap_error_buffer);
